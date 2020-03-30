@@ -1,0 +1,111 @@
+#lang eopl
+;################### PROYECTO FINAL FLP ############################
+;Alexis Diego Timaná Romero (1870385)
+;Luis Eduardo Ruiz Castaño (1831986)
+;Gabriel De Jesús Arango (1823077)
+;#############################################################
+;SINTAXIS BASADA EN PYTHON, JAVA Y C++
+
+; ESPECIFICACIÓN LÉXICA
+(define lexica
+'((white-sp
+   (whitespace) skip)
+  (comentario
+   ("#" (arbno (not #\newline))) skip) ;comentarios basados en python
+  (identificador
+   (letter (arbno (or letter digit "?"))) symbol)
+  (numero
+   (digit (arbno digit)) number) ;entero
+  (numero
+   ("-" digit (arbno digit)) number) ;entero negativo
+  (numero
+   (digit (arbno digit) "." digit (arbno digit)) number) ;flotante
+  (numero
+   ("-" digit (arbno digit) "." digit (arbno digit)) number))) ;flotante negativo
+
+; ESPECIFICACION GRAMÁTICA
+
+(define gramatica
+  '(
+   (programa (expresion) un-programa)
+   (expresion (numero) numero-lit)
+   (expresion (identificador) var-exp)
+   (expresion ("if" "("expresion")" "{" expresion "}" "else" "{"expresion"}") ;expresion condicional basada en c++
+                condicional-exp) 
+   (expresion ("declarar" definiciones (arbno ";"definiciones) ".") ;declaracion de variables basadas en java
+                variableLocal-exp) 
+   (expresion ("("expresion primitiva-binaria expresion")")  primapp-bin-exp) ;primitivas binarias realizadas con notacion infija. Como en c++,java y python
+   (expresion (primitiva-unaria expresion )  primapp-un-exp)
+   (expresion ("def" "[" (separated-list identificador ",") "]"  expresion ) proc-exp) ; procedimientos basados en python
+   (expresion ("evaluar" expresion "(" (separated-list expresion ",") ")") eval-proc) ;evaluacion de procedimientos basado en python
+   (expresion ("recursivo" (arbno identificador "(" (separated-list identificador ",") ")" "{" expresion "}") "en" expresion) letrec-exp)
+   (expresion ("false") false-exp) ;booleano
+   (expresion ("true") true-exp)  ;booleano
+   (expresion ("[" (separated-list expresion ",") "]")list-exp) ;listas basadas en python
+
+   ;constantes (java)
+   (definiciones ("final" identificador "=" expresion) constante-exp)
+   ;variables de asignacion unica (java)
+   (definiciones ("val" identificador "=" expresion) var-asign-unica-exp)
+   (definiciones (identificador "=" "mezclaval") var-mezclaval)
+   ;numeros en base distinta  a la decimal
+   (expresion ("[x32" (arbno numero) "]") numero-base32)
+   (expresion ("[x16"(arbno numero) "]") numero-base16)
+   (expresion ("[x8" (arbno numero) "]") numero-base8)
+   
+   ;primitivas binarias 
+  (primitiva-binaria ("+") primitiva-suma)
+  (primitiva-binaria ("-") primitiva-resta)
+  (primitiva-binaria ("/") primitiva-div)
+  (primitiva-binaria ("*") primitiva-mult)
+  (primitiva-binaria ("concatenar") primitiva-concat)
+  (primitiva-binaria ("%") primitiva-resto)
+  ;booleanas binarias
+  (primitiva-binaria ("<") primitiva-menorQue)
+  (primitiva-binaria (">") primitiva-mayorQue)
+  (primitiva-binaria ("<=") primitiva-menorIgual)
+  (primitiva-binaria (">=") primitiva-mayorIgual)
+  (primitiva-binaria ("==") primitiva-igualQue)
+  (primitiva-binaria ("!=") primitiva-diferenteQue)
+  (primitiva-binaria ("and") primitiva-and)
+  (primitiva-binaria ("or") primitiva-or)
+  ;primitivas unarias
+  (primitiva-unaria ("longitud") primitiva-longitud)
+  (primitiva-unaria ("add1") primitiva-add1)
+  (primitiva-unaria ("sub1") primitiva-sub1)
+  ;booleanas unarias
+  (primitiva-unaria ("not") primitiva-not)
+  ;primitivas sobre listas
+  (primitiva-unaria ("null?") primitiva-null?)
+  (primitiva-binaria ("emptyList") primitiva-null)
+  (primitiva-binaria ("list?") primitiva-lista?)
+  (primitiva-binaria ("first") primitiva-firstOfList)
+  (primitiva-binaria ("second") primitiva-secondOfList)
+  (primitiva-binaria ("cons") primitiva-enlistar2)
+  (primitiva-binaria ("unir") primitiva-unirListas)))
+;############GENERAN LOS DATATYPES####################
+(sllgen:make-define-datatypes lexica gramatica)
+
+(define show-the-datatypes
+  (lambda () (sllgen:list-define-datatypes lexica gramatica)))
+;########################################################
+
+( define scan&parse ;si le paso algo el tiene en cuenta la gramatica (reconoce datos que hayamos definido anteriormente numeros texto, etc)
+   ( sllgen:make-string-parser ;lo retorna como estructura (scan&parse "9")
+     lexica                    ; retorna #(struct:un-programa #(struct:numero-lit 9))
+     gramatica ) )
+
+(define just-scan ;no nos retorna la estructura, solo nos dice que tipo de dato es segun la lexica y en que linea se encuentra
+  (sllgen:make-string-scanner lexica gramatica)) ;ejemplo (just-scan "@x 3" )
+                                                 ;retorna #(struct:un-programa #(struct:numero-lit 9))
+
+;EJEMPLOS DE CADA PRODUCCION
+(scan&parse "x") ;variable
+(scan&parse "if (true) {(9+1)} else {false}") ; concional
+(scan&parse "declarar val x=9; y=mezclaval.") ;declaracion de variables
+(scan&parse "([x32 0 1] + [x32 9])") ;primitivas binarias
+(scan&parse "null? [1,3]") ;primitiva unaria
+(scan&parse "def [w,z] (w+z)") ;definicion de procedimientos
+(scan&parse "evaluar funcion(2,3,r)") ;evaluar procedimientos
+(scan&parse "recursivo nada(s,q,x) { ((s*q)+x) } en evaluar nada(1,2,3)") ;procedimientos recursivos
+(scan&parse "[1,2,true,[x8 2],78]") ;listas 
