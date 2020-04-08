@@ -12,6 +12,8 @@
    (whitespace) skip)
   (comentario
    ("#" (arbno (not #\newline))) skip) ;comentarios basados en python
+  (cadena
+   ("\"" (arbno (not #\newline))"\"" ) symbol )
   (identificador
    (letter (arbno (or letter digit "?"))) symbol)
   (numero
@@ -28,12 +30,14 @@
 (define gramatica
   '(
    (programa (expresion) un-programa)
+   (expresion (cadena) cadena-exp)
    (expresion (numero) numero-lit)
    (expresion (identificador) var-exp)
    (expresion ("if" "("expresion")" "{" expresion "}" "else" "{"expresion"}") ;expresion condicional basada en c++
                 condicional-exp) 
-   (expresion ("declarar" definiciones (arbno ";"definiciones) ".") ;declaracion de variables basadas en java
-                variableLocal-exp) 
+   (expresion ("declarar" definiciones (arbno ";"definiciones) "." "en" expresion) ;declaracion de variables basadas en java
+                variableLocal-exp)
+   (expresion ( "cambio" identificador "->" expresion )  cambiovalor-exp) ; cambio de valor de variable de asignación única
    (expresion ("("expresion primitiva-binaria expresion")")  primapp-bin-exp) ;primitivas binarias realizadas con notacion infija. Como en c++,java y python
    (expresion (primitiva-unaria expresion )  primapp-un-exp)
    (expresion ("def" "[" (separated-list identificador ",") "]"  expresion ) proc-exp) ; procedimientos basados en python
@@ -52,15 +56,65 @@
    (expresion ("[x32" (arbno numero) "]") numero-base32)
    (expresion ("[x16"(arbno numero) "]") numero-base16)
    (expresion ("[x8" (arbno numero) "]") numero-base8)
+
+
+   ;;;############## PRIMITIVAS DECIMALES ############## %%%
+  ;primitivas unarias decimales
+  (primitiva-unaria ("add1") primitiva-add1)
+  (primitiva-unaria ("sub1") primitiva-sub1)
    
-   ;primitivas binarias 
+   ;primitivas binarias decimales
   (primitiva-binaria ("+") primitiva-suma)
   (primitiva-binaria ("-") primitiva-resta)
   (primitiva-binaria ("/") primitiva-div)
   (primitiva-binaria ("*") primitiva-mult)
-  (primitiva-binaria ("concatenar") primitiva-concat)
   (primitiva-binaria ("%") primitiva-resto)
-  ;booleanas binarias
+
+   ;;;############## PRIMITIVAS OCTALES ############## %%
+    ;primitivas unarias octales
+  (primitiva-unaria ("add1x8") primitiva-add1x8)
+  (primitiva-unaria ("sub1x8") primitiva-sub1x8)
+   
+   ;primitivas binarias octales
+  (primitiva-binaria ("+x8") primitiva-sumax8)
+  (primitiva-binaria ("-x8") primitiva-restax8)
+  (primitiva-binaria ("/x8") primitiva-divx8)
+  (primitiva-binaria ("*x8") primitiva-multx8)
+  (primitiva-binaria ("%x8") primitiva-restox8)
+  
+;#############################################################################################################################
+ 
+     ;;;############## PRIMITIVAS HEXADECIMALES ############## %%%
+    ;primitivas unarias hexadecimales
+  (primitiva-unaria ("add1x16") primitiva-add1x16)
+  (primitiva-unaria ("sub1x16") primitiva-sub1x16)
+   
+   ;primitivas binarias hexadecimales
+  (primitiva-binaria ("+x16") primitiva-sumax16)
+  (primitiva-binaria ("-x16") primitiva-restax16)
+  (primitiva-binaria ("/x16") primitiva-divx16)
+  (primitiva-binaria ("*x16") primitiva-multx16)
+  (primitiva-binaria ("%x16") primitiva-restox16)
+
+  ;#############################################################################################################################
+
+       ;;;############## PRIMITIVAS BASE 32 ############## %%%
+    ;primitivas unarias base 32
+  (primitiva-unaria ("add1x32") primitiva-add1x32)
+  (primitiva-unaria ("sub1x32") primitiva-sub1x32)
+   
+   ;primitivas binarias base 32
+  (primitiva-binaria ("+x32") primitiva-sumax32)
+  (primitiva-binaria ("-x32") primitiva-restax32)
+  (primitiva-binaria ("/x32") primitiva-divx32)
+  (primitiva-binaria ("*x32") primitiva-multx32)
+  (primitiva-binaria ("%x32") primitiva-restox32)
+
+  ;#############################################################################################################################
+
+  
+  ;booleanas binarias decimales
+  (primitiva-binaria ("<") primitiva-menorQue)
   (primitiva-binaria ("<") primitiva-menorQue)
   (primitiva-binaria (">") primitiva-mayorQue)
   (primitiva-binaria ("<=") primitiva-menorIgual)
@@ -69,20 +123,28 @@
   (primitiva-binaria ("!=") primitiva-diferenteQue)
   (primitiva-binaria ("and") primitiva-and)
   (primitiva-binaria ("or") primitiva-or)
-  ;primitivas unarias
-  (primitiva-unaria ("longitud") primitiva-longitud)
-  (primitiva-unaria ("add1") primitiva-add1)
-  (primitiva-unaria ("sub1") primitiva-sub1)
-  ;booleanas unarias
+
+  ;booleanas unarias decimales
   (primitiva-unaria ("not") primitiva-not)
+
+  ;#############################################################################################################################
+
+  ;primitivas unaria lista // string
+  (primitiva-unaria ("longitud") primitiva-longitud)
+  ;primitiva binaria string
+  (primitiva-binaria ("concatenar") primitiva-concat)
+
+  ;#############################################################################################################################
+
   ;primitivas sobre listas
   (primitiva-unaria ("null?") primitiva-null?)
-  (primitiva-binaria ("emptyList") primitiva-null)
-  (primitiva-binaria ("list?") primitiva-lista?)
-  (primitiva-binaria ("first") primitiva-firstOfList)
-  (primitiva-binaria ("second") primitiva-secondOfList)
-  (primitiva-binaria ("cons") primitiva-enlistar2)
+  (primitiva-unaria ("emptyList") primitiva-null)
+  (primitiva-unaria ("list?") primitiva-lista?)
+  (primitiva-unaria ("first") primitiva-firstOfList)
+  (primitiva-unaria ("second") primitiva-secondOfList)
+  (primitiva-unaria ("cons") primitiva-enlistar2)
   (primitiva-binaria ("unir") primitiva-unirListas)))
+
 ;############GENERAN LOS DATATYPES####################
 (sllgen:make-define-datatypes lexica gramatica)
 
@@ -102,10 +164,30 @@
 ;EJEMPLOS DE CADA PRODUCCION
 (scan&parse "x") ;variable
 (scan&parse "if (true) {(9+1)} else {false}") ; concional
-(scan&parse "declarar val x=9; y=mezclaval.") ;declaracion de variables
-(scan&parse "([x32 0 1] + [x32 9])") ;primitivas binarias
-(scan&parse "null? [1,3]") ;primitiva unaria
+
+(scan&parse "add1 5") ;primitivas unarias para decimales
+(scan&parse "(5 + 5)") ;primitivas  binarias para decimales
+(scan&parse " ([x32 0 1] +x32 [x32 9]) ") ;primitivas binarias base 32
+(scan&parse " ([x8 0 1] +x8 [x8 1]) ") ;primitivas binarias octales
+(scan&parse " ([x16 0 1] +x16 [x16 1]) ") ;primitivas binarias hexadecimales
+
+(scan&parse " (3 > 5) ") ;primitiva binaria booleana
+(scan&parse " not 3") ;primitiva unaria booleana
+
+
+
 (scan&parse "def [w,z] (w+z)") ;definicion de procedimientos
 (scan&parse "evaluar funcion(2,3,r)") ;evaluar procedimientos
+
 (scan&parse "recursivo nada(s,q,x) { ((s*q)+x) } en evaluar nada(1,2,3)") ;procedimientos recursivos
+
 (scan&parse "[1,2,true,[x8 2],78]") ;listas 
+(scan&parse "null? [1,3]") ;primitiva unaria para listas
+(scan&parse "([1,2,true,[x8 2],78] unir [1, 2, 3])") ;primitiva binaria de listas
+
+(scan&parse "declarar val x=9; y=mezclaval. en 1024") ;declaracion de variables
+(scan&parse "declarar val e = 811. en 6") ;Variable de asignación única
+(scan&parse "declarar final jajajjjsisas = 811. en 5") ;Variable de asignación única
+
+;(scan&parse
+
