@@ -115,7 +115,6 @@
   
   ;booleanas binarias decimales
   (primitiva-binaria ("<") primitiva-menorQue)
-  (primitiva-binaria ("<") primitiva-menorQue)
   (primitiva-binaria (">") primitiva-mayorQue)
   (primitiva-binaria ("<=") primitiva-menorIgual)
   (primitiva-binaria (">=") primitiva-mayorIgual)
@@ -161,6 +160,187 @@
   (sllgen:make-string-scanner lexica gramatica)) ;ejemplo (just-scan "@x 3" )
                                                  ;retorna #(struct:un-programa #(struct:numero-lit 9))
 
+;Tipo de dato para la cerradura
+(define-datatype procVal procVal?
+
+  (cerradura (lista-ID (list-of symbol?))
+             (exp expresion?)
+             (amb environment?)))
+
+
+;auxiliar para evaluar procedimientos
+(define apply-procval (lambda (proc args)
+                        (cases procVal proc
+                          (cerradura (los exp env) (eval-exp exp  (extend-env los args env))))))
+
+;El Interpretador (FrontEnd + Evaluación + señal para lectura )
+
+(define interpretador
+  (sllgen:make-rep-loop "DLG-->"
+    (lambda (pgm) (eval-program  pgm))
+    (sllgen:make-stream-parser 
+      lexica
+      gramatica)))
+
+;El Interprete
+
+;eval-program: <programa> -> numero
+; función que evalúa un programa teniendo en cuenta un ambiente dado (se inicializa dentro del programa)
+
+(define eval-program
+  (lambda (pgm)
+    (cases programa pgm
+      (un-programa (exp) (eval-exp exp (init-env))))))
+
+(define eval-exp (lambda (exp env)
+                   (cases expresion exp
+                     (numero-lit (n)n)
+                     (numero-base32 (n) n )
+                     (numero-base16 (n) n )
+                     (numero-base8 (n) n )
+                     (cadena-exp (n)n)
+                     (var-exp (v) (buscar-variable env v) )
+                     (primapp-bin-exp (exp1 prim exp2)
+                                  (let (
+                                        ;variables
+                                        (valor1  (eval-exp exp1 env) )
+                                        (valor2  (eval-exp exp2 env) ))
+                                        ;cuerpo
+                                        (eval-primitiva-bin valor1 valor2 prim)))
+                     (primapp-un-exp (primUn exp)
+                                     (let (
+                                           (arg (eval-exp exp env)))
+                                       (eval-primitiva-un primUn arg)))
+                     (false-exp () #f)
+                     (true-exp () #t)
+                     (condicional-exp (test-exp true-exp false-exp) 
+                                      (if (valor-verdad? (eval-exp test-exp env)) (eval-exp true-exp env)
+                                          (eval-exp false-exp env)))
+                     (proc-exp (ids cuerpo) (cerradura ids cuerpo env)  )
+                     (eval-proc (proc args) (apply-procval (eval-exp proc env) (eval-rands args env) ))
+                     (letrec-exp (procedimiento-name symbol cuerpo letrec-body)
+                                 (eval-exp letrec-body
+                                  (recursivo-extendido procedimiento-name symbol cuerpo env)
+                                  ))
+                     (list-exp (exps) (eval-rands exps env))
+                     (else #t))))
+
+;funcion que determina si la expresion de un condicional es cierta o falsa
+(define valor-verdad?
+  (lambda (x)
+    (if (equal? x #t) #t #f)))
+
+; funciones auxiliares para aplicar eval-expression a cada elemento de una 
+; lista de operandos (expresiones)
+(define eval-rands
+  (lambda (rands env)
+    (map (lambda (x) (eval-rand x env)) rands))) ;mapea el lambda con cada elemento de la lista de expresiones (le llegan en sintaxis abstracta) que le llega
+
+(define eval-rand
+  (lambda (rand env)
+    (eval-exp rand env))) ;evalua cada elemento, para que al final así los cuerpos ya no estén en sitaxis abstracta y pueda aplicar el extended-env
+
+(define eval-primitiva-bin (lambda (valor1 valor2 op)
+                    (cases primitiva-binaria op
+                      (primitiva-suma () (+ valor1 valor2))
+                      (primitiva-resta () (- valor1 valor2))
+                      (primitiva-mult () (* valor1 valor2))
+                      (primitiva-div () (/ valor1 valor2))
+                      (primitiva-concat () (string-append valor1 valor2))
+                      (else #t))))
+
+(define eval-primitiva-un (lambda (primUn arg)
+                    (cases primitiva-unaria primUn
+                      (primitiva-add1 () (+ arg 1))
+                      (primitiva-sub1 () (- arg 1))
+                      (primitiva-longitud () (string-length arg))
+                      (else #t))))
+
+
+;##############TODO LO DE AMBIENTES (PARA QUE FUNCIONEN) necesarios siempre####################
+
+;definición del tipo de dato ambiente
+
+(define-datatype environment environment?
+  (empty-env-record)
+  (extended-env-record (syms (list-of symbol?))
+                       (vals (list-of scheme-value?))
+                       (env environment?))
+  (recursivo-extendido           (procedimiento-name (list-of symbol?))
+                                 (symbol (list-of (list-of symbol?)))
+                                 (cuerpo (list-of expresion?))
+                                 (env environment?))
+
+  
+ )
+
+(define scheme-value? (lambda (v) #t))
+
+;empty-env:      -> enviroment
+;función que crea un ambiente vacío
+(define empty-env  
+  (lambda ()
+    (empty-env-record)))       ;llamado al constructor de ambiente vacío 
+
+
+;extend-env: <list-of symbols> <list-of numbers> enviroment -> enviroment
+;función que crea un ambiente extendido
+(define extend-env
+  (lambda (syms vals env)
+    (extended-env-record syms vals env)))
+
+;Ambiente inicial vacío.
+(define init-env
+  (lambda ()
+     (empty-env)))
+
+;función que busca un símbolo en un ambiente
+(define buscar-variable
+  (lambda (env sym)
+    (cases environment env
+      (empty-env-record ()
+                        (eopl:error "Error, la variable no existe"))
+      (extended-env-record (syms vals env)
+                           (let ((pos (list-find-position sym syms)))
+                             (if (number? pos)
+                                 (list-ref vals pos)
+                                 (buscar-variable env sym))))
+      (recursivo-extendido (procedimiento-name symbol cuerpo old-env)
+                         (let ((pos (list-find-position sym procedimiento-name)))
+                             (if (number? pos)
+                                 (cerradura
+                                           (list-ref symbol pos)
+                                           (list-ref cuerpo pos)
+                                           env)
+                                 (buscar-variable old-env sym )
+                                 ))))))
+
+;****************************************************************************************
+;Funciones Auxiliares
+
+; funciones auxiliares para encontrar la posición de un símbolo
+; en la lista de símbolos de unambiente
+
+(define list-find-position
+  (lambda (sym los)
+    (list-index (lambda (sym1) (eqv? sym1 sym)) los)))
+
+(define list-index
+  (lambda (pred ls)
+    (cond
+      ((null? ls) #f)
+      ((pred (car ls)) 0)
+      (else (let ((list-index-r (list-index pred (cdr ls))))
+              (if (number? list-index-r)
+                (+ list-index-r 1)
+                #f))))))
+
+
+
+
+
+;######################################################################################################
+;######################################################################################################
 ;EJEMPLOS DE CADA PRODUCCION
 (scan&parse "x") ;variable
 (scan&parse "if (true) {(9+1)} else {false}") ; concional
@@ -188,6 +368,4 @@
 (scan&parse "declarar val x=9; y=mezclaval; en 1024") ;declaracion de variables
 (scan&parse "declarar val e = 811; en 6") ;Variable de asignación única
 (scan&parse "declarar final jajajjjsisas = 811; en 5") ;Variable de asignación única
-
-;(scan&parse
 
