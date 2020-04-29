@@ -78,9 +78,7 @@
    ;primitivas binarias octales
   (primitiva-binaria ("+x8") primitiva-sumax8)
   (primitiva-binaria ("-x8") primitiva-restax8)
-  (primitiva-binaria ("/x8") primitiva-divx8)
   (primitiva-binaria ("*x8") primitiva-multx8)
-  (primitiva-binaria ("%x8") primitiva-restox8)
   
 ;#############################################################################################################################
  
@@ -92,9 +90,7 @@
    ;primitivas binarias hexadecimales
   (primitiva-binaria ("+x16") primitiva-sumax16)
   (primitiva-binaria ("-x16") primitiva-restax16)
-  (primitiva-binaria ("/x16") primitiva-divx16)
   (primitiva-binaria ("*x16") primitiva-multx16)
-  (primitiva-binaria ("%x16") primitiva-restox16)
 
   ;#############################################################################################################################
 
@@ -106,9 +102,7 @@
    ;primitivas binarias base 32
   (primitiva-binaria ("+x32") primitiva-sumax32)
   (primitiva-binaria ("-x32") primitiva-restax32)
-  (primitiva-binaria ("/x32") primitiva-divx32)
   (primitiva-binaria ("*x32") primitiva-multx32)
-  (primitiva-binaria ("%x32") primitiva-restox32)
 
   ;#############################################################################################################################
 
@@ -140,8 +134,7 @@
   (primitiva-unaria ("emptyList") primitiva-null)
   (primitiva-unaria ("list?") primitiva-lista?)
   (primitiva-unaria ("first") primitiva-firstOfList)
-  (primitiva-unaria ("second") primitiva-secondOfList)
-  (primitiva-unaria ("cons") primitiva-enlistar2)
+  (primitiva-unaria ("resto") primitiva-restOfList)
   (primitiva-binaria ("unir") primitiva-unirListas)))
 
 ;############GENERAN LOS DATATYPES####################
@@ -247,15 +240,96 @@
                       (primitiva-mult () (* valor1 valor2))
                       (primitiva-div () (/ valor1 valor2))
                       (primitiva-concat () (string-append valor1 valor2))
+                      (primitiva-resto () (remainder valor1 valor2))
+                      ;
+                      (primitiva-menorQue () (< valor1 valor2))
+                      (primitiva-mayorQue () (> valor1 valor2))
+                      (primitiva-menorIgual () (<= valor1 valor2))
+                      (primitiva-mayorIgual () (>= valor1 valor2))
+                      (primitiva-igualQue () (equal? valor1 valor2))
+                      (primitiva-diferenteQue () (not(equal? valor1 valor2)))
+                      (primitiva-and () (and (valor-verdad? valor1)(valor-verdad? valor2)))
+                      (primitiva-or () (or (valor-verdad? valor1)(valor-verdad? valor2)))
+                      ;Para octales
+                      (primitiva-sumax8 () (suma valor1 valor2 8))
+                      (primitiva-restax8 () (resta valor1 valor2 8))
+                      (primitiva-multx8 () (multiplicacion valor1 valor2 8))
+                      ;Para hexadecimales
+                      (primitiva-sumax16 () (suma valor1 valor2 16))
+                      (primitiva-restax16 () (resta valor1 valor2 16))
+                      (primitiva-multx16 () (multiplicacion valor1 valor2 16))
+                      ;Para base 32
+                      (primitiva-sumax32 () (suma valor1 valor2 32))
+                      (primitiva-restax32 () (resta valor1 valor2 32))
+                      (primitiva-multx32 () (multiplicacion valor1 valor2 32))
+                      ;listas
+                      (primitiva-unirListas () (append valor1 valor2))
                       (else #t))))
 
+;EVALUA PRIMITAVAS UNARIAS
 (define eval-primitiva-un (lambda (primUn arg)
                     (cases primitiva-unaria primUn
                       (primitiva-add1 () (+ arg 1))
                       (primitiva-sub1 () (- arg 1))
+                      ;para octales
+                      (primitiva-add1x8 () (successor arg 8))
+                      (primitiva-sub1x8 () (predecessor arg 8))
+                      ;para hexadecimales
+                      (primitiva-add1x16 () (successor arg 16))
+                      (primitiva-sub1x16 () (predecessor arg 16))
+                      ;para base 32
+                      (primitiva-add1x32 () (successor arg 32))
+                      (primitiva-sub1x32 () (predecessor arg 32))
+                      ;
                       (primitiva-longitud () (string-length arg))
+                      (primitiva-not () (not arg))
+                      (primitiva-null? () (null? arg))
+                      (primitiva-null () empty)
+                      (primitiva-lista? () (list? arg))
+                      (primitiva-firstOfList () (car arg))
+                      (primitiva-restOfList () (cdr arg))
                       (else #t))))
 
+;#############################REPRESENTACION BIGNUM QUE NOS AYUDA A HACER OPERACIONES EN BASE DISTINTA A LA DECIMAL################
+
+;Zero: Función constructora que determina la representación del cero en bignum
+( define zero ( lambda ( )'()))
+
+;is-Zero?: Función observadora que retorna #t si el parametro que recibe es cero o #f en caso contrario
+( define is-zero? ( lambda ( n ) (null? n)))
+
+;succesor: Función constructora que recibe un número n en representación bignum y retorna el siguiente número (n+1) 
+( define successor ( lambda ( n base) (if (is-zero? n)(list 1)
+                                      (if (< (car n) (- base 1)) 
+                                      (cons (+(car n) 1) (cdr n))
+                                            (cons 0 (successor (cdr n) base))))) )
+
+;predecessor: Función constructora que recibe un número (n+1) en representación bignum y retorna el número anterior (n)
+(define predecessor (lambda (n base) (cond
+                                  [(is-zero? n) (eopl:error "El cero no tiene predecesor")]
+                                  [(and (= (car n) 1) (= (length n) 1)) '()]
+                                  [(> (car n) 0) (cons (- (car n) 1) (cdr n))]
+                                  [(= (car n) 0) (cons (- base 1) (predecessor (cdr n) base))])))
+
+;CODIGO CLIENTE
+
+(define suma
+  (lambda (x y base)
+    (if (is-zero? x)
+        y
+        (successor (suma (predecessor x base) y base) base))))
+
+(define resta
+  (lambda (x y base)
+    (if (is-zero? y)
+        x
+        (predecessor (resta  x (predecessor y) base) base))))
+
+(define multiplicacion
+  (lambda (x y base)
+    (if (is-zero? x)
+        (zero)
+        (suma (multiplicacion (predecessor x base) y base) y base))))
 
 ;##############TODO LO DE AMBIENTES (PARA QUE FUNCIONEN) necesarios siempre####################
 
@@ -334,9 +408,6 @@
               (if (number? list-index-r)
                 (+ list-index-r 1)
                 #f))))))
-
-
-
 
 
 ;######################################################################################################
